@@ -29,6 +29,7 @@ import (
 var builtins = map[string]string{
 	"mitchellh.virtualbox": "virtualbox",
 	"mitchellh.vmware":     "vmware",
+	"mitchellh.vmware-esx":     "vmware-esx",
 }
 
 type pluginConfig struct {
@@ -180,6 +181,12 @@ func (p *PostProcessor) PostProcess(ui packer.Ui, artifact packer.Artifact) (pac
 	}
 
 	if p.config.UploadToVCenter == jsonTrue {
+		if artifact.BuilderId() == "mitchellh.vmware-esx" {
+		 
+             		if err := removeVcenterVirtualMachine(ui, p.config, vmx); err != nil {
+                        	return nil, false, err
+			}
+		} 
 		if err := uploadToVCenter(ui, p.config, vmdk, vmx); err != nil {
 			return nil, false, err
 		}
@@ -380,6 +387,54 @@ func uploadFileToStorage(ui packer.Ui, config pluginConfig, file string, fileDes
 	defer res.Body.Close()
 
 	return nil
+}
+
+func removeVcenterVirtualMachine( ui packer.Ui, config pluginConfig, vmx string) error {
+	sdkURL, err := url.Parse(fmt.Sprintf("https://%s:%s@%s/sdk",
+		url.QueryEscape(config.Username),
+		url.QueryEscape(config.Password),
+		config.Host))
+	if err != nil {
+		return err
+	}
+
+	client, err := govmomi.NewClient(context.TODO(), sdkURL, true)
+	if err != nil {
+		return err
+	}
+
+	splitString := strings.Split(vmx, "/")
+	last := splitString[len(splitString)-1]
+	vmName := strings.TrimSuffix(last, ".vmx")
+
+	finder := find.NewFinder(client.Client, false)
+	datacenter, err := finder.DefaultDatacenter(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	finder.SetDatacenter(datacenter)
+
+	vm, err := finder.VirtualMachine(context.TODO(), vmName)
+	if err != nil {
+		return err
+	}
+	
+	ui.Message(fmt.Sprintf("Destroying %s", vmName))
+	task, err := vm.Destroy(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	_, err = task.WaitForResult(context.TODO(), nil)
+
+	if err != nil {
+		return err
+	}
+
+	ui.Message(fmt.Sprintf("Destroyed %s", vmName))
+
+        return nil
 }
 
 func registerVMTemplate(ui packer.Ui, config pluginConfig, vmx string, clonerequired bool) error {
