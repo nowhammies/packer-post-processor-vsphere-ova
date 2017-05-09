@@ -417,23 +417,22 @@ func removeVcenterVirtualMachine( ui packer.Ui, config pluginConfig, vmx string)
 
 	vm, err := finder.VirtualMachine(context.TODO(), vmName)
 	if err != nil {
-		return err
+		fmt.Println(err)
 	}
-	
-	ui.Message(fmt.Sprintf("Destroying %s", vmName))
-	task, err := vm.Destroy(context.TODO())
-	if err != nil {
-		return err
+	if vm != nil {	
+		ui.Message(fmt.Sprintf("Destroying %s", vmName))
+		task, err := vm.Destroy(context.TODO())
+		if err != nil {
+			return err
+		}
+
+		_, err = task.WaitForResult(context.TODO(), nil)
+
+		if err != nil {
+			return err
+		}
+		ui.Message(fmt.Sprintf("Destroyed %s", vmName))
 	}
-
-	_, err = task.WaitForResult(context.TODO(), nil)
-
-	if err != nil {
-		return err
-	}
-
-	ui.Message(fmt.Sprintf("Destroyed %s", vmName))
-
         return nil
 }
 
